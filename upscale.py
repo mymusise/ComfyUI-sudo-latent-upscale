@@ -8,6 +8,7 @@ from .arch.craft_arch import CRAFT
 from .arch.swinfir_arch import SwinFIR
 from .arch.drct_arch import drct
 import wget
+import comfy
 
 
 class SudoLatentUpscale:
@@ -59,6 +60,7 @@ class SudoLatentUpscale:
             ),
         }
         self.version = "none"
+        self.latent_upscale_method = "nearest-exact"
 
     def check_and_download(self, file_path: str):
         models_path = os.path.join(self.local_dir, self.path)
@@ -91,6 +93,7 @@ class SudoLatentUpscale:
                         "DRCT-l_12x6_170k_l1_vaeDecode_l1_fft_xl",
                     ],
                 ),
+                "upscale_by": ("FLOAT", {"default": 2, "min": 1, "max": 2, "step": 0.1}),
             },
         }
 
@@ -100,7 +103,14 @@ class SudoLatentUpscale:
 
     CATEGORY = "latent"
 
-    def upscale(self, latent, version):
+    def upscale(self, latent, version, upscale_by: int=2):
+        _, _, ori_H, ori_W = latent['samples'].shape
+        new_width = int(max(ori_W // 8, 1)) * 8
+        new_height = int(max(ori_H // 8, 1)) * 8
+        latent['samples'] = comfy.utils.common_upscale(latent['samples'], new_width, new_height, self.latent_upscale_method, "disabled")
+
+        dis_width = int(max(ori_W * upscale_by, 1))
+        dis_height = int(max(ori_H * upscale_by, 1))
         device = model_management.get_torch_device()
         samples = latent["samples"].to(device=device, dtype=self.dtype)
 
@@ -231,6 +241,7 @@ class SudoLatentUpscale:
         with torch.inference_mode():
             latent_out = self.model(samples)
 
+        latent_out = comfy.utils.common_upscale(latent_out, dis_width, dis_height, self.latent_upscale_method, "disabled")
         latent_out = latent_out.to(device="cpu", dtype=self.dtype)
         self.model.to(device=model_management.vae_offload_device())
         return ({"samples": latent_out},)
