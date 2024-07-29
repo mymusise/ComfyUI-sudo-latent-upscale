@@ -94,6 +94,7 @@ class SudoLatentUpscale:
                     ],
                 ),
                 "upscale_by": ("FLOAT", {"default": 2, "min": 1, "max": 2, "step": 0.1}),
+                "upscale_method": (["nearest-exact", "bilinear", "area", "bicubic", "bislerp"],),
             },
         }
 
@@ -103,11 +104,11 @@ class SudoLatentUpscale:
 
     CATEGORY = "latent"
 
-    def upscale(self, latent, version, upscale_by: int=2):
+    def upscale(self, latent, version, upscale_by: int=2, upscale_method: str="nearest-exact"):
         _, _, ori_H, ori_W = latent['samples'].shape
-        new_width = int(max(ori_W // 8, 1)) * 8
-        new_height = int(max(ori_H // 8, 1)) * 8
-        latent['samples'] = comfy.utils.common_upscale(latent['samples'], new_width, new_height, self.latent_upscale_method, "disabled")
+        new_width = int(max(ori_W // 16, 1)) * 16
+        new_height = int(max(ori_H // 16, 1)) * 16
+        latent['samples'] = comfy.utils.common_upscale(latent['samples'], new_width, new_height, upscale_method, "center")
 
         dis_width = int(max(ori_W * upscale_by, 1))
         dis_height = int(max(ori_H * upscale_by, 1))
@@ -241,7 +242,7 @@ class SudoLatentUpscale:
         with torch.inference_mode():
             latent_out = self.model(samples)
 
-        latent_out = comfy.utils.common_upscale(latent_out, dis_width, dis_height, self.latent_upscale_method, "disabled")
+        latent_out = comfy.utils.common_upscale(latent_out, dis_width, dis_height, upscale_method, "disabled")
         latent_out = latent_out.to(device="cpu", dtype=self.dtype)
         self.model.to(device=model_management.vae_offload_device())
         return ({"samples": latent_out},)
